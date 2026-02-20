@@ -1,11 +1,12 @@
 "use client"
 
 import { useState } from "react"
+import { toast } from "sonner"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Progress } from "@/components/ui/progress"
-import { AlertTriangle, Pencil, Check, X } from "lucide-react"
+import { AlertTriangle, Loader2, Pencil, Check, X } from "lucide-react"
 
 interface BudgetCategory {
   id: string
@@ -30,20 +31,50 @@ export function BudgetView() {
   const [categories, setCategories] = useState<BudgetCategory[]>(initialCategories)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editValue, setEditValue] = useState("")
+  const [savingId, setSavingId] = useState<string | null>(null)
 
   const startEdit = (cat: BudgetCategory) => {
     setEditingId(cat.id)
     setEditValue(cat.budget.toString())
   }
 
-  const saveEdit = (id: string) => {
+  const saveEdit = async (id: string) => {
     const newBudget = parseFloat(editValue)
-    if (!isNaN(newBudget) && newBudget > 0) {
-      setCategories((prev) =>
-        prev.map((c) => (c.id === id ? { ...c, budget: newBudget } : c))
-      )
+    if (isNaN(newBudget) || newBudget <= 0) return
+    const previous = categories.find((c) => c.id === id)
+    setSavingId(id)
+    setCategories((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, budget: newBudget } : c))
+    )
+    try {
+      const res = await fetch(`/api/budget/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ limit_amount: newBudget }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error(data?.error ?? "Failed to update budget")
+      }
+      const updated = Number(data?.limit_amount)
+      if (Number.isFinite(updated)) {
+        setCategories((prev) =>
+          prev.map((c) => (c.id === id ? { ...c, budget: updated } : c))
+        )
+      }
+      toast.success("Budget updated")
+      setEditingId(null)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to update budget"
+      toast.error(message)
+      if (previous) {
+        setCategories((prev) =>
+          prev.map((c) => (c.id === id ? { ...c, budget: previous.budget } : c))
+        )
+      }
+    } finally {
+      setSavingId(null)
     }
-    setEditingId(null)
   }
 
   const cancelEdit = () => {
@@ -119,8 +150,19 @@ export function BudgetView() {
                               if (e.key === "Escape") cancelEdit()
                             }}
                           />
-                          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => saveEdit(cat.id)} aria-label="Save">
-                            <Check className="h-4 w-4 text-[hsl(152,60%,42%)]" />
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-7 w-7"
+                            onClick={() => saveEdit(cat.id)}
+                            disabled={savingId === cat.id}
+                            aria-label="Save"
+                          >
+                            {savingId === cat.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin text-[hsl(152,60%,42%)]" />
+                            ) : (
+                              <Check className="h-4 w-4 text-[hsl(152,60%,42%)]" />
+                            )}
                           </Button>
                           <Button size="icon" variant="ghost" className="h-7 w-7" onClick={cancelEdit} aria-label="Cancel">
                             <X className="h-4 w-4 text-destructive" />
