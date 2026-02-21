@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { toast } from "sonner"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -32,6 +32,39 @@ export function BudgetView() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editValue, setEditValue] = useState("")
   const [savingId, setSavingId] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    fetch("/api/budget")
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to load")
+        return res.json()
+      })
+      .then((data: { id: string; name: string; color: string; budget: number; spent: number }[]) => {
+        if (cancelled) return
+        if (Array.isArray(data) && data.length > 0) {
+          setCategories(
+            data.map((r) => ({
+              id: r.id,
+              name: r.name,
+              spent: r.spent,
+              budget: r.budget,
+              color: r.color || "bg-primary",
+            }))
+          )
+        }
+      })
+      .catch(() => {
+        if (!cancelled) toast.error("Could not load budgets; showing sample data.")
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const startEdit = (cat: BudgetCategory) => {
     setEditingId(cat.id)
@@ -86,6 +119,9 @@ export function BudgetView() {
 
   return (
     <div className="flex flex-col gap-6">
+      {loading && (
+        <p className="text-sm text-muted-foreground">Loading budgets…</p>
+      )}
       {/* Summary */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Card>
